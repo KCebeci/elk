@@ -1,0 +1,116 @@
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: es-cluster
+  namespace: stock
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: elasticsearch
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: elasticsearch
+    spec:
+      initContainers:
+        - name: fix-permissions
+          image: busybox
+          command:
+            - sh
+            - '-c'
+            - 'chown -R 1000:1000 /usr/share/elasticsearch/data'
+          resources: {}
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/elasticsearch/data
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: Always
+        - name: increase-vm-max-map
+          image: busybox
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: Always
+        - name: increase-fd-ulimit
+          image: busybox
+          command:
+            - sh
+            - '-c'
+            - ulimit -n 65536
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: Always
+      containers:
+        - resources:
+            limits:
+              cpu: '2'
+              memory: 4Gi
+            requests:
+              cpu: '2'
+              memory: 4Gi
+          terminationMessagePath: /dev/termination-log
+          name: elasticsearch
+          env:
+            - name: cluster.name
+              value: k8s-logs
+            - name: node.name
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: discovery.seed_hosts
+              value: >-
+                es-cluster-0.elasticsearch,es-cluster-1.elasticsearch,es-cluster-2.elasticsearch
+            - name: cluster.initial_master_nodes
+              value: 'es-cluster-0,es-cluster-1,es-cluster-2'
+            - name: ES_JAVA_OPTS
+              value: '-Xms512m -Xmx512m'
+            - name: TZ
+              value: Europe/Istanbul
+          ports:
+            - name: rest
+              containerPort: 9200
+              protocol: TCP
+            - name: inter-node
+              containerPort: 9300
+              protocol: TCP
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/elasticsearch/data
+          terminationMessagePolicy: File
+          image: 'docker.elastic.co/elasticsearch/elasticsearch:7.11.1'
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      securityContext: {}
+      schedulerName: default-scheduler
+  volumeClaimTemplates:
+    - kind: PersistentVolumeClaim
+      apiVersion: v1
+      metadata:
+        name: data
+        creationTimestamp: null
+        annotations:
+          volume.beta.kubernetes.io/storage-class: ocs-storagecluster-cephfs
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi
+        storageClassName: ocs-storagecluster-cephfs
+        volumeMode: Filesystem
+      status:
+        phase: Pending
+  serviceName: elasticsearch
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+  revisionHistoryLimit: 10

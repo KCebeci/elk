@@ -1,0 +1,57 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: filebeat-stock-prod-config
+  namespace: stock
+  labels:
+    k8s-app: filebeat-stock-prod
+data:
+  filebeat-stock-prod.yml: >-
+    filebeat.inputs:
+
+    - type: container
+      paths:
+        - /var/log/containers/*stock_stock-service*.log
+        - /var/log/containers/*stock_store-service*.log
+        - /var/log/containers/*stock_supplier-service*.log
+        - /var/log/containers/*stock_transfer-service*.log
+        - /var/log/containers/*stock_api-gateway*.log
+        - /var/log/containers/*stock_auth-service*.log
+        - /var/log/containers/*stock_billing-service*.log
+        - /var/log/containers/*stock_byp-service*.log
+        - /var/log/containers/*stock_config-server*.log
+        - /var/log/containers/*stock_erp-service*.log
+        - /var/log/containers/*stock_mediator-service*.log
+        - /var/log/containers/*stock_sales-service*.log
+      fields:
+        type: 
+      processors:
+        - add_kubernetes_metadata:
+            host: ${NODE_NAME}
+            matchers:
+            - logs_path:
+                logs_path: "/var/log/containers/"
+      multiline:
+        pattern: '^APP\||^APM\||^20\d\d-'
+        negate:  true
+        match:   after
+
+    # To enable hints based autodiscover, remove `filebeat.inputs` configuration
+    #and uncomment this:
+
+    #filebeat.autodiscover: #  providers: #    - type: kubernetes #     
+    #namespace: stock #      node: ${NODE_NAME} #      hints.enabled: true
+    #      #hints.default_config: #        type: container #        paths:
+    #          - #/var/log/containers/*${data.kubernetes.container.id}.log
+
+    processors:
+      - add_cloud_metadata:
+      - add_host_metadata:
+      - drop_fields:
+          fields: ["agent.version", "agent.type", "agent.id", "agent.name", "agent.hostname", "agent.ephemeral_id", "container.runtime", "host.architecture", "host.containerized", "host.ip", "host.mac", "host.name", "host.hostname", "host.os.codename", "host.os.family", "host.os.kernel", "host.os.name", "host.os.platform", "host.os.version", "input.type"]
+
+    output.elasticsearch:
+      hosts: ['${ELASTICSEARCH_HOST:elasticsearch}:${ELASTICSEARCH_PORT:9200}']
+    setup:
+      ilm:
+        enabled: false

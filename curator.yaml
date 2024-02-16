@@ -1,0 +1,49 @@
+kind: CronJob
+apiVersion: batch/v1beta1
+metadata:
+  name: curator
+  namespace: stock
+  labels:
+    app: curator
+spec:
+  schedule: 00 20 * * *
+  startingDeadlineSeconds: 120
+  concurrencyPolicy: Forbid
+  suspend: false
+  jobTemplate:
+    metadata:
+      creationTimestamp: null
+    spec:
+      template:
+        metadata:
+          creationTimestamp: null
+        spec:
+          volumes:
+            - name: config
+              configMap:
+                name: curator-config
+                defaultMode: 420
+          containers:
+            - resources: {}
+              terminationMessagePath: /dev/termination-log
+              name: curator
+              env:
+                - name: TZ
+                  value: Europe/Istanbul
+              imagePullPolicy: IfNotPresent
+              volumeMounts:
+                - name: config
+                  mountPath: /etc/config
+              terminationMessagePolicy: File
+              image: 'bobrik/curator:5.8.1'
+              args:
+                - '--config'
+                - /etc/config/config.yml
+                - /etc/config/action_file.yml
+          restartPolicy: OnFailure
+          terminationGracePeriodSeconds: 30
+          dnsPolicy: ClusterFirst
+          securityContext: {}
+          schedulerName: default-scheduler
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
